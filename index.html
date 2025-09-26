@@ -138,6 +138,11 @@
           <label class="flex"><input name="cat" type="radio" value="sea"> Moře & oceán</label>
           <label class="flex"><input name="cat" type="radio" value="space"> Vesmír & fantasy</label>
         </div>
+        <div class="row" style="gap:.4rem;justify-content:flex-end">
+          <span class="hint" style="margin-right:auto">Tip: Tlačítka níže pracují s <strong>aktuálně zvolenou kategorií</strong>.</span>
+          <button id="selectShown" class="btn ghost" type="button">Vybrat zobrazené</button>
+          <button id="clearShown" class="btn ghost" type="button">Zrušit zobrazené</button>
+        </div>
         <div id="gallery" class="preview" style="margin-top:.8rem"></div>
         <div id="selSummary" class="hint" style="margin-top:.4rem">Vybráno: 0 ikon.</div>
         <details style="margin-top:.2rem"><summary>Zobrazit seznam vybraných</summary><div id="selList" class="hint"></div></details>
@@ -465,6 +470,8 @@
   const filterRadios = Array.from(document.querySelectorAll('input[name="cat"]'));
   const selectAllBtn = document.getElementById('selectAll');
   const clearAllBtn = document.getElementById('clearAll');
+  const selectShownBtn = document.getElementById('selectShown');
+  const clearShownBtn = document.getElementById('clearShown');
   const useSelectedBtn = document.getElementById('useSelected');
   const onlyLibraryChk = document.getElementById('onlyLibrary');
 
@@ -509,6 +516,14 @@
 
   selectAllBtn.addEventListener('click', ()=>{ EMOJI_LIBRARY.forEach(([,hex])=>GALLERY_SELECTED.add(hex)); renderGallery(document.querySelector('input[name="cat"]:checked')?.value||'all'); updateSelectionUI(); updateDeckInfo(); renderDeckPreview(); updateGoState(); });
   clearAllBtn.addEventListener('click', ()=>{ GALLERY_SELECTED.clear(); renderGallery(document.querySelector('input[name="cat"]:checked')?.value||'all'); updateSelectionUI(); updateDeckInfo(); renderDeckPreview(); updateGoState(); });
+
+  // Hromadné operace pro aktuální kategorii
+  function currentFilter(){ const r=document.querySelector('input[name="cat"]:checked'); return (r && r.value) ? r.value : 'all'; }
+  function itemsFor(cat){ return EMOJI_LIBRARY.filter(e=> cat==='all' ? true : e[2]===cat).map(e=>e[1]); }
+  function selectInCategory(cat){ itemsFor(cat).forEach(hex=> GALLERY_SELECTED.add(hex)); renderGallery(currentFilter()); updateSelectionUI(); updateDeckInfo(); renderDeckPreview(); updateGoState(); }
+  function clearInCategory(cat){ itemsFor(cat).forEach(hex=> GALLERY_SELECTED.delete(hex)); renderGallery(currentFilter()); updateSelectionUI(); updateDeckInfo(); renderDeckPreview(); updateGoState(); }
+  if(selectShownBtn) selectShownBtn.addEventListener('click', ()=>{ selectInCategory(currentFilter()); });
+  if(clearShownBtn) clearShownBtn.addEventListener('click', ()=>{ clearInCategory(currentFilter()); });
 
   // Přidání vybraných do balíčku (použije se při generování)
   useSelectedBtn.addEventListener('click', ()=>{
@@ -653,6 +668,13 @@
     const haveSel = plannedDeckLength(); assert('plannedDeckLength bez výběru = počet vybraných', haveSel=== (document.getElementById('files').files.length + GALLERY_SELECTED.size));
     document.getElementById('deckSize').value = oldDeckVal; // restore
     // restore selection
+    // 7) Výběr kategorií – select/clear pro 'animals'
+    const before = GALLERY_SELECTED.size;
+    const animalsCount = EMOJI_LIBRARY.filter(e=>e[2]==='animals').length;
+    clearInCategory('animals'); const base = GALLERY_SELECTED.size;
+    selectInCategory('animals'); assert('selectInCategory(animals) přidá všechna zvířata', GALLERY_SELECTED.size === base + animalsCount);
+    clearInCategory('animals'); assert('clearInCategory(animals) odebere všechna zvířata', GALLERY_SELECTED.size === base);
+    // restore původního výběru
     GALLERY_SELECTED.clear(); prevSel.forEach(x=>GALLERY_SELECTED.add(x)); updateSelectionUI();
   })();
   </script>
