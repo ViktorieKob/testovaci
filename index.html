@@ -20,6 +20,7 @@
     input[type="file"]{width:100%}
     .row{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap}
     .btn{appearance:none;border:0;background:var(--primary);color:white;padding:.8rem 1rem;border-radius:10px;font-weight:600;cursor:pointer}
+    .btn[disabled]{pointer-events:none;}
     .btn:disabled{opacity:.5;cursor:not-allowed}
     .btn.secondary{background:#111827;color:white}
     .btn.ghost{background:#e5e7eb;color:#111827}
@@ -624,9 +625,15 @@
     const have = plannedDeckLength();
     const goBtn = document.getElementById('go');
     const status = document.getElementById('status');
+    if(!goBtn) return;
+    const lock = (msg)=>{ goBtn.disabled = true; goBtn.setAttribute('disabled',''); goBtn.style.pointerEvents='none'; if(status) status.innerHTML = msg; };
+    const unlock = ()=>{ goBtn.disabled = false; goBtn.removeAttribute('disabled'); goBtn.style.pointerEvents=''; if(status && (!window.lastPDFCards && !window.lastPDFCalls)) status.textContent = 'Připraveno.'; };
     if(have < required){
-      if(goBtn) goBtn.disabled = true;
-      if(status) status.innerHTML = `⚠️ Potřebuji alespoň <strong>${required}</strong> symbolů; aktuálně máš ${have}. Vyber víc obrázků (nebo zvyš fallback počet).`;
+      lock(`⚠️ Potřebuji alespoň <strong>${required}</strong> symbolů; aktuálně máš ${have}. Vyber víc obrázků (nebo z knihovny).`);
+    } else {
+      unlock();
+    }
+  }</strong> symbolů; aktuálně máš ${have}. Vyber víc obrázků (nebo zvyš fallback počet).`;
     } else {
       if(goBtn) goBtn.disabled = false;
       if(status && (!window.lastPDFCards && !window.lastPDFCalls)) status.textContent = 'Připraveno.';
@@ -661,6 +668,18 @@
       if (typeof renderDeckPreview === 'function') renderDeckPreview();
       if (typeof updateGoState === 'function') updateGoState();
     } catch (e) { console.warn('Init galerie přeskočen:', e); }
+  </script>
+  <script>
+    // Jistá inicializace po načtení DOMu (zobrazí galerii a správně nastaví tlačítko)
+    document.addEventListener('DOMContentLoaded', ()=>{
+      try{
+        if (typeof renderGallery === 'function') renderGallery('all');
+        if (typeof updateSelectionUI === 'function') updateSelectionUI();
+        if (typeof updateDeckInfo === 'function') updateDeckInfo();
+        if (typeof renderDeckPreview === 'function') renderDeckPreview();
+        if (typeof updateGoState === 'function') updateGoState();
+      }catch(e){ console.warn('Init (DOMContentLoaded) skipped:', e); }
+    });
   </script>
 </body>
 </html>
