@@ -148,6 +148,24 @@
       </div>
     </section>
 
+    <!-- Přehled vybraných obrázků (balíček) -->
+    <section class="card">
+      <h2>Vybrané obrázky (balíček)</h2>
+      <div class="content">
+        <div class="hint">Zde uvidíš všechny <strong>aktuálně použité</strong> symboly pro generování: nahrané fotky + vybranou knihovnu (nebo fallback, pokud není nic vybráno). Pokud zaškrtneš „Pouze knihovna“, zobrazí se jen ona.</div>
+        <div id="deckPreview" class="preview" style="margin-top:.5rem; max-height:360px; overflow:auto"></div>
+      </div>
+    </section>
+
+    <!-- Náhledy a log --> obrázků (balíček) -->
+    <section class="card">
+      <h2>Vybrané obrázky (balíček)</h2>
+      <div class="content">
+        <div class="hint">Zde uvidíš všechny <strong>aktuálně použité</strong> symboly pro generování: nahrané fotky + vybranou knihovnu (nebo fallback, pokud není nic vybráno). Pokud zaškrtneš „Pouze knihovna“, zobrazí se jen ona.</div>
+        <div id="deckPreview" class="preview" style="margin-top:.5rem; max-height:360px; overflow:auto"></div>
+      </div>
+    </section>
+
     <!-- Náhledy a log -->
     <section class="card">
       <h2>Rychlý náhled & log</h2>
@@ -430,6 +448,7 @@
   const cpToUrl = (hex)=> CDN_BASE + hex.toLowerCase() + '.png';
 
   const galleryEl = document.getElementById('gallery');
+  const deckPreviewE
   const deckInfoEl = document.getElementById('deckInfo');
   const selSummaryEl = document.getElementById('selSummary');
   const selListEl = document.getElementById('selList');
@@ -530,7 +549,87 @@
   (function runSelfTests(){
     function assert(name, cond){ if(cond){ console.log('TEST PASS:', name); log('TEST PASS: '+name, 'good'); } else { console.error('TEST FAIL:', name); log('TEST FAIL: '+name, 'bad'); } }
     // 1) Bingo detekce – plná první řada
-    const m1=[[true,true,true],[false,false,false],[false,false,false]]; assert('hasBingo – řada', hasBingo(m1,3)===true);
+    const m1=[[true,true,true],[false,false,false],</script>
+
+  <script>
+  // ====== Náhled balíčku + blokace tlačítka, pokud je nedostatek symbolů ======
+  function computeRequiredCells(){
+    const size = parseInt(document.getElementById('size').value, 10);
+    const free = document.getElementById('free').checked;
+    return size*size - (free?1:0);
+  }
+  function getUploadsForPreview(){
+    const input = document.getElementById('files');
+    return Array.from(input.files||[]).map(f=>({src: URL.createObjectURL(f), label: f.name, _src:'upload'}));
+  }
+  function getLibForPreview(){
+    return Array.from(window.GALLERY_SELECTED||[]).map(hex=>({
+      src: (typeof cpToUrl === 'function' ? cpToUrl(hex) : ''),
+      label: (window.EMOJI_LIBRARY||[]).find(e=>e[1]===hex)?.[0] || '',
+      _src:'lib'
+    }));
+  }
+  function buildPreviewDeck(){
+    const onlyLib = document.getElementById('onlyLibrary').checked;
+    const uploads = getUploadsForPreview();
+    const lib = getLibForPreview();
+    if(onlyLib){ return lib; }
+    if(uploads.length || lib.length){ return [...uploads, ...lib]; }
+    // fallback
+    const n = Math.max(parseInt(document.getElementById('deckSize').value||'24',10), 0);
+    return Array.from({length:n}, (_,i)=>({src: (typeof makeNumberIcon==='function'? makeNumberIcon(i+1):''), label: String(i+1), _src:'fallback'}));
+  }
+  function plannedDeckLength(){
+    const onlyLib = document.getElementById('onlyLibrary').checked;
+    const uploadsN = (document.getElementById('files')?.files?.length) || 0;
+    const libN = (window.GALLERY_SELECTED?.size) || 0;
+    if(onlyLib){ return libN; }
+    if(uploadsN || libN){ return uploadsN + libN; }
+    return parseInt(document.getElementById('deckSize').value||'0',10);
+  }
+  function renderDeckPreview(){
+    const host = document.getElementById('deckPreview'); if(!host) return;
+    const deck = buildPreviewDeck();
+    host.innerHTML = '';
+    deck.forEach((it,idx)=>{
+      const wrap = document.createElement('div'); wrap.className='thumb';
+      const img = document.createElement('img'); img.src = it.src; img.alt = it.label||('Symbol '+(idx+1)); img.loading='lazy'; img.style.maxHeight='120px';
+      const cap = document.createElement('div'); cap.className='hint'; cap.textContent = it.label || ('#'+(idx+1));
+      wrap.appendChild(img); wrap.appendChild(cap); host.appendChild(wrap);
+    });
+  }
+  function updateGoState(){
+    const required = computeRequiredCells();
+    const have = plannedDeckLength();
+    const goBtn = document.getElementById('go');
+    const status = document.getElementById('status');
+    if(have < required){
+      if(goBtn) goBtn.disabled = true;
+      if(status) status.innerHTML = `⚠️ Potřebuji alespoň <strong>${required}</strong> symbolů; aktuálně máš ${have}. Vyber víc obrázků (nebo zvyš fallback počet).`;
+    } else {
+      if(goBtn) goBtn.disabled = false;
+      if(status && (!window.lastPDFCards && !window.lastPDFCalls)) status.textContent = 'Připraveno.';
+    }
+  }
+
+  // Rozšiř testovací/aktuální UI volání – obalíme updateSelectionUI, aby vždy přegenerovalo i náhled + stav tlačítka
+  if(typeof window.updateSelectionUI === 'function'){
+    const _origUpdateSelectionUI = window.updateSelectionUI;
+    window.updateSelectionUI = function(){ _origUpdateSelectionUI(); try{ if(typeof updateDeckInfo==='function') updateDeckInfo(); }catch(e){} renderDeckPreview(); updateGoState(); };
+  }
+
+  // Globální posluchače pro přepočty
+  document.getElementById('size').addEventListener('change', ()=>{ renderDeckPreview(); updateGoState(); });
+  document.getElementById('free').addEventListener('change', ()=>{ renderDeckPreview(); updateGoState(); });
+  document.getElementById('deckSize').addEventListener('input', ()=>{ renderDeckPreview(); updateGoState(); });
+  document.getElementById('onlyLibrary').addEventListener('change', ()=>{ renderDeckPreview(); updateGoState(); });
+  document.getElementById('files').addEventListener('change', ()=>{ renderDeckPreview(); updateGoState(); });
+
+  // První vykreslení
+  renderDeckPreview();
+  updateGoState();
+  </script>
+</body>e]]; assert('hasBingo – řada', hasBingo(m1,3)===true);
     // 2) Bingo detekce – diagonála
     const m2=[[true,false,false],[false,true,false],[false,false,true]]; assert('hasBingo – diagonála', hasBingo(m2,3)===true);
     // 3) Deck fallback velikost
