@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Obrázkové Bingo – generátor karet + pořadí losování (PDF)</title>
+  <style>
+    :root { --primary:#2563eb; --accent:#10b981; --danger:#ef4444; --muted:#6b7280; }
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;line-height:1.45;margin:0;background:#f8fafc;color:#0f172a}
+    header{padding:1.2rem 1rem;background:white;box-shadow:0 1px 8px rgba(0,0,0,.05);position:sticky;top:0;z-index:5}
+    h1{font-size:1.35rem;margin:.1rem 0 .2rem 0}
+    .wrap{max-width:1100px;margin:0 auto;padding:1rem}
+    .grid{display:grid;grid-template-columns:280px 1fr;gap:1rem}
+    .card{background:white;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 6px 18px rgba(0,0,0,.04)}
+    .card h2{font-size:1.05rem;margin:0;padding:.9rem 1rem;border-bottom:1px solid #e5e7eb}
+    .card .content{padding:1rem}
+    label{display:block;font-size:.95rem;margin:.6rem 0 .3rem}
+    input[type="number"],select{width:100%;padding:.6rem .7rem;border:1px solid #e5e7eb;border-radius:10px;background:#f9fafb}
+    input[type="checkbox"]{transform:scale(1.1);margin-right:.5rem}
+    input[type="file"]{width:100%}
+    .row{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap}
+    .btn{appearance:none;border:0;background:var(--primary);color:white;padding:.8rem 1rem;border-radius:10px;font-weight:600;cursor:pointer}
+    .btn[disabled]{pointer-events:none;}
+    .btn:disabled{opacity:.5;cursor:not-allowed}
+    .btn.secondary{background:#111827;color:white}
+    .btn.ghost{background:#e5e7eb;color:#111827}
+    .hint{font-size:.9rem;color:var(--muted)}
+    .pill{display:inline-block;padding:.2rem .5rem;border-radius:999px;background:#eef2ff;color:#3730a3;font-size:.75rem;margin-left:.35rem}
+    .preview{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+    .thumb{border:1px dashed #d1d5db;border-radius:10px;padding:.5rem;background:#fafafa;text-align:center}
+
+    /* Bingo karta render */
+    .bingo{width:794px;height:1123px; /* A4 @ ~96dpi */
+           background:white;border:1px solid #e5e7eb;border-radius:14px;display:flex;flex-direction:column;overflow:hidden}
+    .bingo header{box-shadow:none;position:static;border-bottom:2px solid #e5e7eb}
+    .bingo .meta{display:flex;justify-content:space-between;align-items:center;padding:.6rem 1rem;color:#374151}
+    .board{flex:1;display:grid;gap:8px;padding:12px 22px 22px 22px;grid-template-rows:repeat(var(--size),1fr);grid-template-columns:repeat(var(--size),1fr)}
+    .cell{border:1px solid #e5e7eb;border-radius:10px;display:grid;place-items:center;padding:8px}
+    .cell img{max-width:100%;max-height:100%}
+    .cell .lbl{font-size:28px}
+    .free{background:rgba(16,185,129,.12);border:2px dashed #10b981}
+
+    .log{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;background:#0b1020;color:#e2e8f0;border-radius:12px;padding:.8rem;overflow:auto;max-height:300px}
+    .good{color:#16a34a}
+    .bad{color:#dc2626}
+    .flex{display:flex;gap:.5rem;align-items:center}
+    .divider{height:1px;background:#e5e7eb;margin:1rem 0}
+    footer{padding:1rem;color:#6b7280;text-align:center}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <h1>Obrázkové Bingo – generátor karet + PDF a pořadí losování <span class="pill">offline v prohlížeči</span></h1>
+      <div class="hint">Nahraj své obrázky (nebo nech generovat očíslované ikony), zvol počet karet a stiskni „Vygenerovat“. Appka se pokusí zajistit, aby byl první výherce vždy jen jeden (pokud to zaškrtneš).</div>
+    </div>
+  </header>
+
+  <!-- Info o licencích -->
+  <div class="wrap" style="padding-top:.75rem;">
+    <div class="hint">Tip: můžeš použít <strong>vestavěnou dětskou knihovnu ikon</strong> (pastelové emoji přes Twemoji CDN, CC-BY 4.0 – přidána atribuce dole) a jednoduše si <strong>zaklikat</strong>, které chceš použít. Nebo nahraj vlastní obrázky jako dřív. Fallback (když nic nevybereš) jsou očíslované pastelové ikony.</div>
+  </div>
+
+  <div class="wrap grid">
+    <!-- Ovládání -->
+    <section class="card">
+      <h2>Nastavení</h2>
+      <div class="content">
+        <label>Obrázky pro bingo (nahraj více souborů) – volitelné</label>
+        <input id="files" type="file" accept="image/*" multiple />
+        <div class="row" style="margin-top:.4rem">
+          <button id="standardizeUploads" class="btn ghost" type="button">Sjednotit nahrané obrázky (čtvercové PNG)</button>
+          <label class="hint" style="margin:0 .4rem 0 0">Cílová velikost</label>
+          <select id="stdSize">
+            <option value="256">256 px</option>
+            <option value="300" selected>300 px</option>
+            <option value="512">512 px</option>
+          </select>
+          <span class="hint">Převede nahrané fotky na čtverec (cover), průhledné PNG – stejné měřítko jako ikony.</span>
+        </div>
+        <div id="stdStatus" class="hint" style="margin:.3rem 0 0 0"></div>
+        <div class="hint">Když nic nenahraješ a nic nezaklikneš v knihovně, vytvoří se automaticky barevné očíslované ikony.</div>
+
+        <label>Počet karet (hráčů)</label>
+        <input id="players" type="number" min="1" max="120" value="15" />
+
+        <div class="row">
+          <div style="flex:1">
+            <label>Velikost mřížky</label>
+            <select id="size">
+              <option value="5" selected>5 × 5</option>
+              <option value="4">4 × 4</option>
+              <option value="3">3 × 3</option>
+            </select>
+          </div>
+          <div class="flex" style="margin-top:1.8rem">
+            <input id="free" type="checkbox" checked />
+            <label for="free" style="margin:0">Střed je „FREE“ (automaticky označený)</label>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:.4rem">
+          <div class="flex">
+            <input id="unique" type="checkbox" checked />
+            <label for="unique" style="margin:0">Vynutit jednoho prvního výherce</label>
+          </div>
+          <div class="flex">
+            <input id="seeded" type="checkbox" />
+            <label for="seeded" style="margin:0">Použít pevné náhodné seed (opakovatelný výsledek)</label>
+          </div>
+        </div>
+
+        <label>Počet unikátních symbolů v balíčku (fallback)</label>
+        <input id="deckSize" type="number" min="9" max="200" value="60" />
+        <div class="hint">Použije se jen pokud nevybereš nic v knihovně ani nenahraješ obrázky.</div>
+
+        <div class="divider"></div>
+        <div class="row">
+          <button id="go" class="btn" disabled>Vygenerovat karty + pořadí (PDF)</button>
+          <button id="dlCards" class="btn secondary" disabled>Stáhnout PDF karet</button>
+          <button id="dlCalls" class="btn ghost" disabled>Stáhnout PDF s pořadím</button>
+        </div>
+        <div style="margin-top:.4rem" class="hint">Po vygenerování se zde zpřístupní tlačítka pro stažení obou PDF.</div>
+        <div id="deckInfo" class="hint" style="margin-top:.4rem"></div>
+      </div>
+    </section>
+
+    <!-- Knihovna obrázků (Twemoji CDN) -->
+    <section class="card">
+      <h2>Knihovna dětských ikon (zaklikni, co chceš použít)</h2>
+      <div class="content">
+        <div class="row" style="justify-content:space-between;align-items:center">
+          <div class="hint">Vyber z připravených motivů: zvířátka, ovoce, počasí, hračky, doprava…
+          <br><span class="hint">Pozn.: Značkové postavy (např. Disney) sem z licenčních důvodů nepřidávám. Pokud máš práva je použít, <strong>nahraj je jako vlastní obrázky</strong> nahoře.</span></div>
+          <div class="row">
+            <button id="selectAll" class="btn ghost" type="button">Vybrat vše</button>
+            <button id="clearAll" class="btn ghost" type="button">Zrušit výběr</button>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="row" style="gap:.6rem;flex-wrap:wrap">
+          <label class="flex"><input id="filter-all" name="cat" type="radio" checked> Vše</label>
+          <label class="flex"><input name="cat" type="radio" value="animals"> Zvířátka</label>
+          <label class="flex"><input name="cat" type="radio" value="food"> Jídlo & ovoce</label>
+          <label class="flex"><input name="cat" type="radio" value="weather"> Počasí</label>
+          <label class="flex"><input name="cat" type="radio" value="toys"> Hračky & zábava</label>
+          <label class="flex"><input name="cat" type="radio" value="transport"> Doprava</label>
+          <label class="flex"><input name="cat" type="radio" value="nature"> Příroda</label>
+          <label class="flex"><input name="cat" type="radio" value="sea"> Moře & oceán</label>
+          <label class="flex"><input name="cat" type="radio" value="space"> Vesmír & fantasy</label>
+        </div>
+        <div class="row" style="gap:.4rem;justify-content:flex-end">
+          <span class="hint" style="margin-right:auto">Tip: Tlačítka níže pracují s <strong>aktuálně zvolenou kategorií</strong>.</span>
+          <button id="selectShown" class="btn ghost" type="button">Vybrat zobrazené</button>
+          <button id="clearShown" class="btn ghost" type="button">Zrušit zobrazené</button>
+        </div>
+        <div id="gallery" class="preview" style="margin-top:.8rem"></div>
+        <div id="selSummary" class="hint" style="margin-top:.4rem">Vybráno: 0 ikon.</div>
+        <details style="margin-top:.2rem"><summary>Zobrazit seznam vybraných</summary><div id="selList" class="hint"></div></details>
+        <div class="divider"></div>
+        <div class="row">
+          <div class="flex"><input id="onlyLibrary" type="checkbox"><label for="onlyLibrary" style="margin:0">Použít <strong>jen</strong> vybrané z knihovny (ignorovat fallback)</label></div>
+          <span class="hint">Výběr z knihovny se počítá automaticky — tlačítko navíc není potřeba.</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Přehled vybraných obrázků (balíček) -->
+    <section class="card">
+      <h2>Vybrané obrázky (balíček)</h2>
+      <div class="content">
+        <div class="hint">Zde uvidíš všechny <strong>aktuálně použité</strong> symboly pro generování: nahrané fotky + vybranou knihovnu (nebo fallback, pokud není nic vybráno). Pokud zaškrtneš „Pouze knihovna“, zobrazí se jen ona.</div>
+        <div id="deckPreview" class="preview" style="margin-top:.5rem; max-height:360px; overflow:auto"></div>
+      </div>
+    </section>
+
+    <!-- Náhledy a log -->
+    <section class="card">
+      <h2>Rychlý náhled & log</h2>
+      <div class="content">
+        <div id="status" class="hint">Připraveno.</div>
+        <div class="divider"></div>
+        <div class="log" id="log" aria-live="polite"></div>
+      </div>
+    </section>
+  </div>
+
+  <footer>© 2025 – Obrázkové Bingo. Vše běží lokálně v prohlížeči (žádný server). | Emoji artwork by <a href="https://twemoji.twitter.com/" target="_blank" rel="noopener">Twemoji</a> (CC-BY 4.0).</footer>
+
+  <!-- Knihovny (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
+  <script>
+  /******************** Pomocné utilitky ********************/
+  const logBox = document.getElementById('log');
+  function log(msg, cls=''){ const p = document.createElement('div'); if(cls) p.className=cls; p.textContent = msg; logBox.appendChild(p); logBox.scrollTop = logBox.scrollHeight; }
+  function shuffle(arr, rng=Math.random){ for(let i=arr.length-1;i>0;i--){ const j=Math.floor(rng()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
+  function seededRNG(seed){ // Mulberry32
+    let t = seed >>> 0; return function(){ t += 0x6D2B79F5; let r = Math.imul(t ^ t>>>15, 1 | t); r ^= r + Math.imul(r ^ r>>>7, 61 | r); return ((r ^ r>>>14) >>> 0) / 4294967296; };
+  }
+
+  // Vytvoří barevné kruhové SVG s číslem (fallback když nejsou obrázky)
+  function makeNumberIcon(n){
+    const hue = (n*47) % 360; const bg = `hsl(${hue} 80% 88%)`; const stroke=`hsl(${hue} 60% 55%)`;
+    const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300'>
+      <defs><filter id='s' x='-20%' y='-20%' width='140%' height='140%'>
+        <feDropShadow dx='0' dy='2' stdDeviation='3' flood-color='rgba(0,0,0,.25)'/>
+      </filter></defs>
+      <rect width='100%' height='100%' fill='white'/>
+      <circle cx='150' cy='150' r='110' fill='${bg}' stroke='${stroke}' stroke-width='10' filter='url(#s)'/>
+      <text x='150' y='170' font-size='120' font-family='Inter,Arial,Segoe UI,sans-serif' text-anchor='middle' fill='${stroke}' font-weight='700'>${n}</text>
+    </svg>`;
+    return 'data:image/svg+xml;base64,'+btoa(unescape(encodeURIComponent(svg)));
+  }
+
+  /*================= Pomocné kreslení / standardizace ================*/
+  function coverFitRect(srcW, srcH, dstW, dstH){
+    const scale = Math.max(dstW/srcW, dstH/srcH);
+    const w = srcW*scale, h = srcH*scale;
+    const x = (dstW - w)/2, y = (dstH - h)/2;
+    return {x,y,w,h,scale};
+  }
+  async function blobFromCanvas(canvas, type='image/png', quality=0.92){
+    return await new Promise(res=> canvas.toBlob(res, type, quality));
+  }
+  async function standardizeInputFiles(targetSize){
+    const input = els.files; const btn = els.stdBtn; const statusEl = document.getElementById('stdStatus');
+    if(!input || !input.files || !input.files.length){ log('Nebyly nahrány žádné soubory – není co standardizovat.', 'bad'); if(statusEl){ statusEl.textContent='Žádné nahrané soubory.'; statusEl.className='hint bad'; } return; }
+    const dt = new DataTransfer();
+    let ok=0, fail=0, i=0; const total=input.files.length;
+    if(btn){ btn.disabled=true; btn.setAttribute('disabled',''); btn.textContent=`Sjednocuji… (0/${total})`; }
+    if(statusEl){ statusEl.textContent='Probíhá standardizace…'; statusEl.className='hint'; }
+    for(const f of Array.from(input.files)){
+      i++;
+      try{
+        const data = await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(f); });
+        const img = await new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=data; });
+        const canvas = document.createElement('canvas'); canvas.width=targetSize; canvas.height=targetSize;
+        const ctx = canvas.getContext('2d'); ctx.clearRect(0,0,targetSize,targetSize);
+        ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality='high';
+        const fit = coverFitRect(img.naturalWidth||img.width, img.naturalHeight||img.height, targetSize, targetSize);
+        ctx.drawImage(img, fit.x, fit.y, fit.w, fit.h);
+        const blob = await blobFromCanvas(canvas, 'image/png', 0.92);
+        const newName = (f.name.replace(/\.[^.]+$/,'') + `_std${targetSize}.png`);
+        dt.items.add(new File([blob], newName, {type:'image/png'}));
+        ok++;
+      }catch(e){ console.error(e); fail++; }
+      if(btn){ btn.textContent=`Sjednocuji… (${i}/${total})`; }
+    }
+    input.files = dt.files;
+    if(btn){ btn.disabled=false; btn.removeAttribute('disabled'); btn.textContent='Sjednotit nahrané obrázky (čtvercové PNG)'; }
+    log(`Standardizace dokončena: ${ok} ✓, ${fail} ✗. Velikost: ${targetSize}×${targetSize}px, PNG.`, fail? 'bad':'good');
+    if(statusEl){ statusEl.textContent = `Hotovo: ${ok} ✓, ${fail} ✗ (velikost ${targetSize}×${targetSize}px, PNG).`; statusEl.className = 'hint ' + (fail? 'bad':'good'); }
+    if(typeof updateDeckInfo==='function') updateDeckInfo();
+    if(typeof renderDeckPreview==='function') renderDeckPreview();
+    if(typeof updateGoState==='function') updateGoState();
+  }
+
+  /*================= AUTO-OPTIMALIZACE UPLOADŮ (rychlé PDF) ================*/
+  async function filesToDataURLsOptimized(fileList){
+    const files = Array.from(fileList||[]);
+    const urls = [];
+    const target = parseInt((window.els && els.stdSize && els.stdSize.value) || '300', 10);
+    for(const f of files){
+      const data = await new Promise(res=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.readAsDataURL(f); });
+      try{
+        const img = await new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=data; });
+        const canvas = document.createElement('canvas'); canvas.width=target; canvas.height=target;
+        const ctx = canvas.getContext('2d'); ctx.clearRect(0,0,target,target); ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality='high';
+        const fit = coverFitRect(img.naturalWidth||img.width, img.naturalHeight||img.height, target, target);
+        ctx.drawImage(img, fit.x, fit.y, fit.w, fit.h);
+        const out = canvas.toDataURL('image/png', 0.92);
+        urls.push({src: out, name: (f.name.replace(/\.[^.]+$/,'') + `_std${target}.png`)});
+      }catch(e){ console.warn('Standardizace selhala, používám originál:', f.name, e); urls.push({src:data, name:f.name}); }
+    }
+    if(urls.length){ log(`Optimalizace uploadů: převedeno ${urls.length} obrázků na ${target}×${target}px PNG kvůli rychlosti.`, 'good'); }
+    return urls;
+  }
+
+  /******************** Bingo logika ********************/
+  function buildDeck(images, desired){
+    if(images && images.length>0){
+      return images.map((it,idx)=>({ id: idx, src: it.src, label: it.name||String(idx+1) }));
+    }
+    // fallback: očíslované ikony 1..desired
+    const n = Math.max(desired, 9);
+    return Array.from({length:n}, (_,i)=>({ id:i, src: makeNumberIcon(i+1), label: String(i+1) }));
+  }
+
+  function makeCard(size, deckIds, freeCenter, rng){
+    const cells = size*size;
+    const ids = shuffle([...deckIds], rng).slice(0, cells - (freeCenter?1:0));
+    const grid = [];
+    let k=0;
+    for(let r=0;r<size;r++){
+      const row=[];
+      for(let c=0;c<size;c++){
+        if(freeCenter && r===Math.floor(size/2) && c===Math.floor(size/2)) row.push({id:-1, free:true});
+        else row.push({id: ids[k++], free:false});
+      }
+      grid.push(row);
+    }
+    return grid;
+  }
+
+  function hasBingo(marks, size){
+    // řádky + sloupce
+    for(let r=0;r<size;r++){ if(marks[r].every(Boolean)) return true; }
+    for(let c=0;c<size;c++){ let ok=true; for(let r=0;r<size;r++){ if(!marks[r][c]){ok=false;break;} } if(ok) return true; }
+    // diagonály
+    let ok=true; for(let i=0;i<size;i++){ if(!marks[i][i]){ok=false;break;} } if(ok) return true;
+    ok=true; for(let i=0;i<size;i++){ if(!marks[i][size-1-i]){ok=false;break;} } if(ok) return true;
+    return false;
+  }
+
+  function simulate(cards, drawOrder, size){
+    const marks = cards.map(card => card.map(row=>row.map(cell => cell.free?true:false)));
+    const firstWinners = [];
+    for(let t=0;t<drawOrder.length;t++){
+      const sym = drawOrder[t];
+      for(let k=0;k<cards.length;k++){
+        const card = cards[k];
+        for(let r=0;r<size;r++) for(let c=0;c<size;c++){
+          const cell = card[r][c];
+          if(!cell.free && cell.id===sym){ marks[k][r][c]=true; }
+        }
+      }
+      for(let k=0;k<cards.length;k++){
+        if(hasBingo(marks[k], size)) firstWinners.push({cardIndex:k, t});
+      }
+      if(firstWinners.length){
+        const minT = Math.min(...firstWinners.map(w=>w.t));
+        const winnersAtMin = firstWinners.filter(w=>w.t===minT).map(w=>w.cardIndex);
+        return { t:minT, winners:new Set(winnersAtMin) };
+      }
+    }
+    return { t:Infinity, winners:new Set() };
+  }
+
+  function ensureUniqueFirstWinner(cards, deckIds, rng, maxTries=1500){
+    for(let i=1;i<=maxTries;i++){
+      const order = shuffle([...deckIds], rng);
+      const sim = simulate(cards, order, cards[0].length);
+      if(sim.winners.size===1){ return {order, firstAt:sim.t, winner:[...sim.winners][0], tries:i}; }
+    }
+    return null; // nepodařilo se v limitu
+  }
+
+  /******************** PDF rendering ********************/
+  async function renderCardToCanvas(cardGrid, deckMap, title){
+    const size = cardGrid.length;
+    const host = document.createElement('div'); host.className='bingo'; host.style.setProperty('--size', size);
+    host.innerHTML = `
+      <header class="meta"><strong>${title}</strong><span>${size}×${size} obrázků</span></header>
+      <div class="board"></div>
+    `;
+    const board = host.querySelector('.board');
+    for(let r=0;r<size;r++){
+      for(let c=0;c<size;c++){
+        const cell = cardGrid[r][c];
+        const div = document.createElement('div'); div.className='cell'+(cell.free?' free':'');
+        if(cell.free){ div.innerHTML = '<div class="lbl">FREE</div>'; }
+        else{
+          const img = document.createElement('img'); img.src = deckMap.get(cell.id).src; img.alt = deckMap.get(cell.id).label || ''; img.crossOrigin='anonymous'; img.decoding='async';
+          div.appendChild(img);
+        }
+        board.appendChild(div);
+      }
+    }
+    host.style.position='fixed'; host.style.left='-9999px'; document.body.appendChild(host);
+    const canvas = await html2canvas(host, {backgroundColor:'#ffffff', scale:2, useCORS:true});
+    host.remove();
+    return canvas;
+  }
+
+  async function makeCardsPDF(cards, deck, fileName='bingo_karty.pdf'){
+    const { jsPDF } = window.jspdf; const pdf = new jsPDF({orientation:'portrait', unit:'pt', format:'a4'});
+    const deckMap = new Map(deck.map(d=>[d.id,d]));
+    for(let i=0;i<cards.length;i++){
+      if(window.els && els.status){ els.status.textContent = `Renderuji karty… ${i+1}/${cards.length}`; }
+      await new Promise(r=> setTimeout(r, 0));
+      const cv = await renderCardToCanvas(cards[i], deckMap, `BINGO karta #${i+1}`);
+      const img = cv.toDataURL('image/jpeg', 0.9);
+      if(i>0) pdf.addPage();
+      pdf.addImage(img,'JPEG', 0, 0, pdf.internal.pageSize.getWidth(), pdf.internal.pageSize.getHeight());
+    }
+    return pdf;
+  }
+
+  async function makeCallsPDF(deck, order, fileName='bingo_poradi.pdf'){
+    const { jsPDF } = window.jspdf; const pdf = new jsPDF({orientation:'portrait', unit:'pt', format:'a4'});
+    const pageW = pdf.internal.pageSize.getWidth();
+    const margin = 36; const cols = 4; const cellW = (pageW - margin*2 - (cols-1)*12)/cols; const cellH = 150;
+    pdf.setFont('helvetica','bold'); pdf.setFontSize(18); pdf.text('Pořadí losování (call sheet)', margin, 32);
+    pdf.setFontSize(10); pdf.setFont('helvetica','normal'); pdf.text(`Počet symbolů: ${order.length}`, margin, 48);
+
+    let x = margin, y = 64; let col=0; const rowGap=12;
+    for(let i=0;i<order.length;i++){
+      const idx = order[i]; const item = deck[idx];
+      const img = new Image(); img.crossOrigin='anonymous'; img.src = item.src; await new Promise(res=>{ img.onload=res; img.onerror=res; });
+      const fmt = (item.src && (item.src.startsWith('data:image/jpeg') || item.src.startsWith('data:image/jpg'))) ? 'JPEG' : 'PNG';
+      pdf.addImage(img, fmt, x, y, cellW, cellH, undefined, 'FAST');
+      pdf.setFont('helvetica','bold'); pdf.setFontSize(12); pdf.text(`${i+1}.`, x, y+cellH+12);
+      pdf.setFont('helvetica','normal'); pdf.text(item.label?String(item.label):`ID ${idx}`, x+22, y+cellH+12);
+
+      x += cellW + 12; col++;
+      if(col===cols){ col=0; x=margin; y += cellH + 32 + rowGap; }
+      if(y+cellH+64>pdf.internal.pageSize.getHeight()){
+        pdf.addPage(); y=64; x=margin; col=0;
+      }
+    }
+    return pdf;
+  }
+
+  /******************** Hlavní akce ********************/
+  const els = {
+    files: document.getElementById('files'),
+    players: document.getElementById('players'),
+    size: document.getElementById('size'),
+    free: document.getElementById('free'),
+    unique: document.getElementById('unique'),
+    seeded: document.getElementById('seeded'),
+    deckSize: document.getElementById('deckSize'),
+    status: document.getElementById('status'),
+    go: document.getElementById('go'),
+    dlCards: document.getElementById('dlCards'),
+    dlCalls: document.getElementById('dlCalls'),
+    stdBtn: document.getElementById('standardizeUploads'),
+    stdSize: document.getElementById('stdSize'),
+  };
+
+  let lastPDFCards = null, lastPDFCalls = null;
+
+  els.go.addEventListener('click', async ()=>{
+    // PŘEDBĚŽNÁ KONTROLA: bez dostatku vybraných symbolů ani nezačínej
+    const requiredPre = ( ()=>{ const size=parseInt(els.size.value,10); const freeCenter=els.free.checked; return size*size - (freeCenter?1:0);} )();
+    const onlyLibElPre = document.getElementById('onlyLibrary');
+    const onlyLibPre = !!(onlyLibElPre && onlyLibElPre.checked);
+    const libNPre = (window.GALLERY_SELECTED && window.GALLERY_SELECTED.size) || 0;
+    const upNPre = (els.files && els.files.files && els.files.files.length) || 0;
+    const havePre = onlyLibPre ? libNPre : (upNPre + libNPre);
+    if(havePre < requiredPre){
+      els.status.innerHTML = `❌ Potřebuji alespoň <strong>${requiredPre}</strong> symbolů; aktuálně máš ${havePre}. Vyber víc obrázků (nebo z knihovny).`;
+      log('Nedostatek symbolů – generování zablokováno.', 'bad');
+      if(typeof updateGoState==='function') updateGoState();
+      return;
+    }
+
+    logBox.innerHTML=''; els.status.textContent='Generuji…';
+    els.go.disabled = true; els.dlCards.disabled = true; els.dlCalls.disabled = true;
+
+    const players = Math.max(1, Math.min(120, parseInt(els.players.value||'1',10)));
+    const size = parseInt(els.size.value,10);
+    const freeCenter = els.free.checked;
+    const uniqueFirst = els.unique.checked;
+    const wantDeckSize = parseInt(els.deckSize.value||'60',10);
+    const rng = els.seeded.checked ? seededRNG(123456789) : Math.random;
+
+    // Načti a AUTO-OPTIMALIZUJ obrázky (pokud jsou)
+    const uploads = await filesToDataURLsOptimized(els.files.files);
+    const deck = buildDeck(uploads, wantDeckSize);
+
+    const cellsPerCard = size*size - (freeCenter?1:0);
+    if(deck.length < cellsPerCard){
+      els.status.innerHTML = `❌ Potřebuji alespoň <strong>${cellsPerCard}</strong> symbolů, ale v balíčku je jen ${deck.length}. Přidej víc obrázků, nebo vyber víc ikon v knihovně.`;
+      log('Nedostatek symbolů pro stavbu karet.', 'bad'); els.go.disabled=false; return;
+    }
+
+    const deckIds = deck.map(d=>d.id);
+
+    // Vytvoř karty
+    log(`Tvořím ${players} karet o velikosti ${size}×${size}…`);
+    const cards = [];
+    for(let p=0;p<players;p++) cards.push(makeCard(size, deckIds, freeCenter, rng));
+
+    // Najdi pořadí losování
+    let result = { order: shuffle([...deckIds], rng), firstAt:null, winner:null, tries:1 };
+    if(uniqueFirst){
+      log('Zkouším najít pořadí s jediným prvním vítězem…');
+      const attempt = ensureUniqueFirstWinner(cards, deckIds, rng, 1800);
+      if(!attempt){
+        log('Nepodařilo se najít jedinečného prvního vítěze do 1800 pokusů. Nechávám náhodné pořadí (může se stát, že vyhraje více lidí najednou).', 'bad');
+      } else {
+        result = { order: attempt.order, firstAt: attempt.firstAt, winner: attempt.winner, tries: attempt.tries };
+        log(`Úspěch: jedinečný první vítěz je karta #${attempt.winner+1} po ${attempt.firstAt+1}. tahu (nalezeno po ${attempt.tries} pokusech).`, 'good');
+      }
+    } else {
+      const sim = simulate(cards, result.order, size);
+      result.firstAt = sim.t; result.winner = sim.winners.size? [...sim.winners][0] : null;
+      log(`Bez vynucení: první výhra nastane na ${sim.t===Infinity?'nikdy':(sim.t+1+'. tahu')}. Počet prvních vítězů: ${sim.winners.size}.`);
+    }
+
+    // Vytvoř PDF soubory
+    els.status.textContent = 'Renderuji PDF… (může chvilku trvat)';
+    const pdfCards = await makeCardsPDF(cards, deck);
+    const pdfCalls = await makeCallsPDF(deck, result.order);
+
+    lastPDFCards = pdfCards; lastPDFCalls = pdfCalls;
+    els.dlCards.disabled = false; els.dlCalls.disabled = false; els.status.innerHTML = 'Hotovo ✅ – můžeš stáhnout PDF níže. ' + (result.winner!=null?`První vítěz (garantovaný): karta #${result.winner+1} po ${result.firstAt+1}. tahu.`:'');
+    els.go.disabled = false;
+  });
+
+  els.dlCards.addEventListener('click', ()=>{ if(!lastPDFCards) return; lastPDFCards.save('bingo_karty.pdf'); });
+  els.dlCalls.addEventListener('click', ()=>{ if(!lastPDFCalls) return; lastPDFCalls.save('bingo_poradi.pdf'); });
+  </script>
+
+  <script>
+  // ====== Knihovna dětských ikon (Twemoji CDN) ======
+  // Každý záznam: [label, codepoint hex (bez 0x), category]
+  const EMOJI_LIBRARY = [
+    // ZVÍŘATA
+    ['Kočka','1f431','animals'],['Pes','1f436','animals'],['Medvěd','1f43b','animals'],['Lev','1f981','animals'],['Tygr','1f42f','animals'],['Slon','1f418','animals'],['Opice','1f412','animals'],['Kuře','1f425','animals'],['Ryba','1f41f','animals'],['Delfín','1f42c','animals'],
+    // JÍDLO
+    ['Jablko','1f34e','food'],['Banán','1f34c','food'],['Jahoda','1f353','food'],['Meloun','1f349','food'],['Třešně','1f352','food'],['Zmrzlina','1f366','food'],['Lízátko','1f36d','food'],['Dort','1f382','food'],['Sušenka','1f36a','food'],['Mrkev','1f955','food'],
+    // POČASÍ
+    ['Slunce','2600','weather'],['Měsíc','1f319','weather'],['Hvězda','2b50','weather'],['Duhová','1f308','weather'],['Mrak','2601','weather'],['Déšť','1f327','weather'],['Sníh','2744','weather'],['Blesk','26a1','weather'],
+    // HRAČKY / ZÁBAVA
+    ['Balónek','1f388','toys'],['Dárek','1f381','toys'],['Party','1f389','toys'],['Puzzle','1f9e9','toys'],['Míč','26bd','toys'],['Basket','1f3c0','toys'],['Kytara','1f3b8','toys'],['Bubínek','1f941','toys'],['Noty','1f3b5','toys'],['Teddy','1f9f8','toys'],
+    // DOPRAVA / DOMY
+    ['Domeček','1f3e0','transport'],['Auto','1f697','transport'],['Autobus','1f68c','transport'],['Vlak','1f682','transport'],['Letadlo','2708','transport'],['Loď','26f5','transport'],['Raketa','1f680','transport'],['Policie','1f693','transport'],['Hasiči','1f692','transport'],['Traktor','1f69c','transport'],
+    // PŘÍRODA
+    ['List','1f342','nature'],['Strom','1f333','nature'],['Květ','1f33c','nature'],['Tulipán','1f337','nature'],['Hříbek','1f344','nature'],['Srdce','2764','nature'],['Zelený lístek','1f331','nature'],['Motýl','1f98b','nature'],['Včela','1f41d','nature'],['Šnek','1f40c','nature'],
+    // MOŘE & OCEÁN
+    ['Tropická rybka','1f420','sea'],['Rybička','1f41f','sea'],['Čtverzubec','1f421','sea'],['Žralok','1f988','sea'],['Velryba','1f40b','sea'],['Velryba s fontánou','1f433','sea'],['Chobotnice','1f419','sea'],['Krab','1f980','sea'],['Kreveta','1f990','sea'],['Kalamár','1f991','sea'],
+    // VESMÍR & FANTASY
+    ['Mimozemšťan','1f47d','space'],['Příšerka','1f47e','space'],['Robot','1f916','space'],['Planeta s prstenci','1fa90','space'],['Zářící hvězda','1f31f','space'],['Raketa','1f680','space']
+  ];
+  // zpřístupni do window pro jiné skripty
+  window.EMOJI_LIBRARY = EMOJI_LIBRARY;
+  const CDN_BASE = 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/';
+  const cpToUrl = (hex)=> CDN_BASE + hex.toLowerCase() + '.png';
+  // zpřístupni resolver do window
+  window.cpToUrl = cpToUrl;
+
+  const galleryEl = document.getElementById('gallery');
+  const deckInfoEl = document.getElementById('deckInfo');
+  const selSummaryEl = document.getElementById('selSummary');
+  const selListEl = document.getElementById('selList');
+  const filterRadios = Array.from(document.querySelectorAll('input[name="cat"]'));
+  const selectAllBtn = document.getElementById('selectAll');
+  const clearAllBtn = document.getElementById('clearAll');
+  const selectShownBtn = document.getElementById('selectShown');
+  const clearShownBtn = document.getElementById('clearShown');
+  const onlyLibraryChk = document.getElementById('onlyLibrary');
+
+  let GALLERY_SELECTED = new Set();
+  
+  // --- Mobilní kompatibilita helpery (bez optional chaining) ---
+  function getCheckedCat(){
+    var el = document.querySelector('input[name="cat"]:checked');
+    return (el && el.value) ? el.value : 'all';
+  }
+  function labelFromHex(hex){
+    for(var i=0;i<EMOJI_LIBRARY.length;i++){ if(EMOJI_LIBRARY[i][1]===hex) return EMOJI_LIBRARY[i][0]; }
+    return '';
+  }
+  function filesCount(){
+    var el = document.getElementById('files');
+    return (el && el.files && el.files.length) ? el.files.length : 0;
+  }
+  function gallerySize(){
+    return (window.GALLERY_SELECTED && typeof window.GALLERY_SELECTED.size==='number') ? window.GALLERY_SELECTED.size : 0;
+  }
+  // ulož referenci do window, aby ji viděly i jiné <script>
+  window.GALLERY_SELECTED = GALLERY_SELECTED;
+  let LIB_ITEMS = []; // {label, src, cat, hex}
+
+  function renderGallery(filter='all'){
+    galleryEl.innerHTML = '';
+    const data = EMOJI_LIBRARY.map(([label,hex,cat])=>({label, hex, cat, src: cpToUrl(hex)}))
+                              .filter(it=> filter==='all' ? true : it.cat===filter);
+    LIB_ITEMS = data;
+    for(const it of data){
+      const wrap = document.createElement('div'); wrap.className='thumb'; wrap.style.cursor='pointer';
+      const img = document.createElement('img'); img.src = it.src; img.alt = it.label; img.loading='lazy'; img.style.maxHeight='120px';
+      const chk = document.createElement('input'); chk.type='checkbox'; chk.style.marginTop='.5rem'; chk.checked = GALLERY_SELECTED.has(it.hex);
+      const cap = document.createElement('div'); cap.className='hint'; cap.textContent = it.label;
+      chk.addEventListener('change', ()=>{ if(chk.checked) GALLERY_SELECTED.add(it.hex); else GALLERY_SELECTED.delete(it.hex); updateSelectionUI(); updateDeckInfo(); renderDeckPreview(); updateGoState(); });
+      wrap.addEventListener('click', (e)=>{ if(e.target!==chk){ chk.checked=!chk.checked; chk.dispatchEvent(new Event('change')); } });
+      wrap.appendChild(img); wrap.appendChild(cap); wrap.appendChild(chk); galleryEl.appendChild(wrap);
+    }
+  }
+  function updateSelectionUI(){
+    const count = GALLERY_SELECTED.size;
+    selSummaryEl.textContent = `Vybráno: ${count} ikon.`;
+    if(count){
+      const names = Array.from(GALLERY_SELECTED).map(hex=> labelFromHex(hex) || hex);
+      selListEl.textContent = names.join(', ');
+    } else {
+      selListEl.textContent = '';
+    }
+    // synchronizace do window pro ostatní skripty
+    window.GALLERY_SELECTED = GALLERY_SELECTED;
+    deckInfoEl.textContent = count ? `Balíček z knihovny: ${count} ikon.` : '';
+  }
+
+  filterRadios.forEach(r=> r.addEventListener('change', ()=>{
+    const val = getCheckedCat();
+    renderGallery(val);
+  }));
+
+  selectAllBtn.addEventListener('click', ()=>{ EMOJI_LIBRARY.forEach(([,hex])=>GALLERY_SELECTED.add(hex)); renderGallery(getCheckedCat()); updateSelectionUI(); updateDeckInfo(); renderDeckPreview(); updateGoState(); });
+  clearAllBtn.addEventListener('click', ()=>{ GALLERY_SELECTED.clear(); renderGallery(getCheckedCat()); updateSelectionUI(); updateDeckInfo(); renderDeckPreview(); updateGoState(); });
+
+  // Hromadné operace pro aktuální kategorii
+  function currentFilter(){ const r=document.querySelector('input[name="cat"]:checked'); return (r && r.value) ? r.value : 'all'; }
+  function itemsFor(cat){ return EMOJI_LIBRARY.filter(e=> cat==='all' ? true : e[2]===cat).map(e=>e[1]); }
+  function selectInCategory(cat){ itemsFor(cat).forEach(hex=> GALLERY_SELECTED.add(hex)); renderGallery(currentFilter()); updateSelectionUI(); updateDeckInfo(); renderDeckPreview(); updateGoState(); }
+  function clearInCategory(cat){ itemsFor(cat).forEach(hex=> GALLERY_SELECTED.delete(hex)); renderGallery(currentFilter()); updateSelectionUI(); updateDeckInfo(); renderDeckPreview(); updateGoState(); }
+  if(selectShownBtn) selectShownBtn.addEventListener('click', ()=>{ selectInCategory(currentFilter()); });
+  if(clearShownBtn) clearShownBtn.addEventListener('click', ()=>{ clearInCategory(currentFilter()); });
+
+  // Překryj buildDeck tak, aby uměl KOMBINOVAT uploady + knihovnu (pokud není zaškrtnuto onlyLibrary)
+  const _origBuildDeck = buildDeck;
+  buildDeck = function(images, desired){
+    const uploads = Array.isArray(images) ? images : [];
+    const libCount = GALLERY_SELECTED.size;
+
+    // Jen knihovna (forced)
+    if(onlyLibraryChk.checked && libCount){
+      return Array.from(GALLERY_SELECTED).map((hex,idx)=>({ id: idx, src: cpToUrl(hex), label: labelFromHex(hex) || ('#'+(idx+1)) }));
+    }
+
+    // Kombinace: uploady + knihovna
+    if(uploads.length || libCount){
+      const libItems = Array.from(GALLERY_SELECTED).map((hex)=>({ src: cpToUrl(hex), label: labelFromHex(hex) || '' }));
+      const merged = [...uploads, ...libItems].map((it,idx)=>({ id: idx, src: it.src, label: it.name || it.label || String(idx+1) }));
+      return merged;
+    }
+
+    // Fallback (očíslované ikony)
+    return _origBuildDeck(null, desired);
+  }
+
+  // Souhrn balíčku v UI (uploady + knihovna)
+  function updateDeckInfo(){
+    const up = (filesCount()) || 0;
+    const lib = GALLERY_SELECTED.size || 0;
+    const total = (onlyLibraryChk.checked ? lib : up + lib);
+    deckInfoEl.textContent = total ? `Balíček připraven: ${total} ikon (nahrané: ${up}, knihovna: ${lib}${onlyLibraryChk.checked?', pouze knihovna':''}).` : '';
+  }
+
+  // Pokud je zaškrtnuto onlyLibrary, upravíme deckSize před generováním
+  const deckSizeInput = document.getElementById('deckSize');
+  document.getElementById('go').addEventListener('click', ()=>{
+    if(onlyLibraryChk.checked && GALLERY_SELECTED.size){ deckSizeInput.value = String(GALLERY_SELECTED.size); }
+  }, {capture:true});
+
+  // ====== Náhled balíčku + blokace tlačítka, pokud je nedostatek symbolů ======
+  function computeRequiredCells(){
+    const size = parseInt(document.getElementById('size').value, 10);
+    const free = document.getElementById('free').checked;
+    return size*size - (free?1:0);
+  }
+  function getUploadsForPreview(){
+    const input = document.getElementById('files');
+    return Array.from(input.files||[]).map(f=>({src: URL.createObjectURL(f), label: f.name, _src:'upload'}));
+  }
+  function getLibForPreview(){
+    return Array.from(window.GALLERY_SELECTED||[]).map(hex=>({
+      src: (typeof cpToUrl === 'function' ? cpToUrl(hex) : ''),
+      label: labelFromHex(hex) || '',
+      _src:'lib'
+    }));
+  }
+  function buildPreviewDeck(){
+    const onlyLib = document.getElementById('onlyLibrary').checked;
+    const uploads = getUploadsForPreview();
+    const lib = getLibForPreview();
+    if(onlyLib){ return lib; }
+    if(uploads.length || lib.length){ return [...uploads, ...lib]; }
+    // fallback (pouze pro náhled; pro povolení tlačítka se fallback NEpočítá)
+    const n = Math.max(parseInt(document.getElementById('deckSize').value||'24',10), 0);
+    return Array.from({length:n}, (_,i)=>({src: (typeof makeNumberIcon==='function'? makeNumberIcon(i+1):''), label: String(i+1), _src:'fallback'}));
+  }
+  function plannedDeckLength(){
+    const onlyLib = document.getElementById('onlyLibrary').checked;
+    const uploadsN = (filesCount()) || 0;
+    const libN = (gallerySize()) || 0;
+    // Pro povolení tlačítka IGNORUJEME fallback – vyžadujeme skutečný výběr
+    return onlyLib ? libN : (uploadsN + libN);
+  }
+  function renderDeckPreview(){
+    const host = document.getElementById('deckPreview'); if(!host) return;
+    const deck = buildPreviewDeck();
+    host.innerHTML = '';
+    deck.forEach((it,idx)=>{
+      const wrap = document.createElement('div'); wrap.className='thumb';
+      const img = document.createElement('img'); img.src = it.src; img.alt = it.label||('Symbol '+(idx+1)); img.loading='lazy'; img.style.maxHeight='120px';
+      const cap = document.createElement('div'); cap.className='hint'; cap.textContent = it.label || ('#'+(idx+1));
+      wrap.appendChild(img); wrap.appendChild(cap); host.appendChild(wrap);
+    });
+  }
+  function updateGoState(){
+    const required = computeRequiredCells();
+    const have = plannedDeckLength();
+    const goBtn = document.getElementById('go');
+    const status = document.getElementById('status');
+    if(!goBtn) return;
+    const lock = (msg)=>{ goBtn.disabled = true; goBtn.setAttribute('disabled',''); goBtn.style.pointerEvents='none'; if(status) status.innerHTML = msg; };
+    const unlock = ()=>{ goBtn.disabled = false; goBtn.removeAttribute('disabled'); goBtn.style.pointerEvents=''; if(status && (!window.lastPDFCards && !window.lastPDFCalls)) status.textContent = 'Připraveno.'; };
+    if(have < required){
+      lock(`⚠️ Potřebuji alespoň <strong>${required}</strong> symbolů; aktuálně máš ${have}. Vyber víc obrázků (nebo z knihovny).`);
+    } else {
+      unlock();
+    }
+  }
+
+  // Rozšiř testovací/aktuální UI volání – obalíme updateSelectionUI, aby vždy přegenerovalo i náhled + stav tlačítka
+  if(typeof window.updateSelectionUI === 'function'){
+    const _origUpdateSelectionUI = window.updateSelectionUI;
+    window.updateSelectionUI = function(){ _origUpdateSelectionUI(); try{ if(typeof updateDeckInfo==='function') updateDeckInfo(); }catch(e){} renderDeckPreview(); updateGoState(); };
+  }
+
+  // Globální posluchače pro přepočty
+  document.getElementById('size').addEventListener('change', ()=>{ renderDeckPreview(); updateGoState(); });
+  document.getElementById('free').addEventListener('change', ()=>{ renderDeckPreview(); updateGoState(); });
+  document.getElementById('deckSize').addEventListener('input', ()=>{ renderDeckPreview(); updateGoState(); });
+  document.getElementById('onlyLibrary').addEventListener('change', ()=>{ renderDeckPreview(); updateGoState(); });
+  document.getElementById('files').addEventListener('change', ()=>{ renderDeckPreview(); updateGoState(); updateDeckInfo(); });
+  if(els.stdBtn){ els.stdBtn.addEventListener('click', async ()=>{ const s=parseInt(els.stdSize?.value||'300',10); await standardizeInputFiles(s); }); }
+
+  // První vykreslení
+  renderGallery('all');
+  updateSelectionUI();
+  updateDeckInfo();
+  renderDeckPreview();
+  updateGoState();
+
+  /******************** Samotesty (rychlé runtime testy) ********************/
+  (function runSelfTests(){
+    function assert(name, cond){ if(cond){ console.log('TEST PASS:', name); log('TEST PASS: '+name, 'good'); } else { console.error('TEST FAIL:', name); log('TEST FAIL: '+name, 'bad'); } }
+    // 1) Bingo detekce – plná první řada
+    const m1=[[true,true,true],[false,false,false],[false,false,false]]; assert('hasBingo – řada', hasBingo(m1,3)===true);
+    // 2) Bingo detekce – diagonála
+    const m2=[[true,false,false],[false,true,false],[false,false,true]]; assert('hasBingo – diagonála', hasBingo(m2,3)===true);
+    // 3) Deck fallback velikost
+    const d=buildDeck([],24); assert('buildDeck fallback ≥ požadavek', d.length>=24);
+    // 4) Vytvoření karty – velikost mřížky
+    const ids=d.map(x=>x.id); const card=makeCard(3,ids,false,Math.random); assert('makeCard 3×3 má 9 buněk', card.flat().length===9);
+    // 5) Kombinace uploady + knihovna (bez onlyLibrary)
+    const prevSel = Array.from(GALLERY_SELECTED); GALLERY_SELECTED.clear(); GALLERY_SELECTED.add('1f431'); GALLERY_SELECTED.add('1f436');
+    const fakeUploads=[{src:'data:,A',name:'a.png'},{src:'data:,B',name:'b.png'}];
+    const merged = buildDeck(fakeUploads, 10); assert('buildDeck kombinuje uploady + knihovnu', merged.length===4);
+    // 6) plannedDeckLength ignoruje fallback
+    const oldDeckVal = document.getElementById('deckSize').value; document.getElementById('deckSize').value = '60';
+    const haveSel = plannedDeckLength(); assert('plannedDeckLength bez výběru = počet vybraných', haveSel=== (document.getElementById('files').files.length + GALLERY_SELECTED.size));
+    document.getElementById('deckSize').value = oldDeckVal; // restore
+    // 7) Výběr kategorií – select/clear pro 'animals'
+    const animalsCount = EMOJI_LIBRARY.filter(e=>e[2]==='animals').length;
+    clearInCategory('animals'); const base = GALLERY_SELECTED.size;
+    selectInCategory('animals'); assert('selectInCategory(animals) přidá všechna zvířata', GALLERY_SELECTED.size === base + animalsCount);
+    clearInCategory('animals'); assert('clearInCategory(animals) odebere všechna zvířata', GALLERY_SELECTED.size === base);
+    // 8) coverFitRect – sanity pro 200×100 → 300×300
+    const fit = coverFitRect(200,100,300,300); assert('coverFitRect center-cover', Math.round(fit.w)===600 && Math.round(fit.h)===300 && Math.round(fit.x)===-150 && Math.round(fit.y)===0);
+    // restore původního výběru
+    GALLERY_SELECTED.clear(); prevSel.forEach(x=>GALLERY_SELECTED.add(x)); updateSelectionUI();
+  })();
+  </script>
+
+  <script>
+    // Jistá inicializace po načtení DOMu
