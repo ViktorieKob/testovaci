@@ -157,15 +157,6 @@
       </div>
     </section>
 
-    <!-- Náhledy a log --> obrázků (balíček) -->
-    <section class="card">
-      <h2>Vybrané obrázky (balíček)</h2>
-      <div class="content">
-        <div class="hint">Zde uvidíš všechny <strong>aktuálně použité</strong> symboly pro generování: nahrané fotky + vybranou knihovnu (nebo fallback, pokud není nic vybráno). Pokud zaškrtneš „Pouze knihovna“, zobrazí se jen ona.</div>
-        <div id="deckPreview" class="preview" style="margin-top:.5rem; max-height:360px; overflow:auto"></div>
-      </div>
-    </section>
-
     <!-- Náhledy a log -->
     <section class="card">
       <h2>Rychlý náhled & log</h2>
@@ -448,7 +439,6 @@
   const cpToUrl = (hex)=> CDN_BASE + hex.toLowerCase() + '.png';
 
   const galleryEl = document.getElementById('gallery');
-  const deckPreviewE
   const deckInfoEl = document.getElementById('deckInfo');
   const selSummaryEl = document.getElementById('selSummary');
   const selListEl = document.getElementById('selList');
@@ -549,7 +539,15 @@
   (function runSelfTests(){
     function assert(name, cond){ if(cond){ console.log('TEST PASS:', name); log('TEST PASS: '+name, 'good'); } else { console.error('TEST FAIL:', name); log('TEST FAIL: '+name, 'bad'); } }
     // 1) Bingo detekce – plná první řada
-    const m1=[[true,true,true],[false,false,false],</script>
+    const m1=[[true,true,true],[false,false,false],[false,false,false]]; assert('hasBingo – řada', hasBingo(m1,3)===true);
+    // 2) Bingo detekce – diagonála
+    const m2=[[true,false,false],[false,true,false],[false,false,true]]; assert('hasBingo – diagonála', hasBingo(m2,3)===true);
+    // 3) Deck fallback velikost
+    const d=buildDeck([],24); assert('buildDeck fallback ≥ požadavek', d.length>=24);
+    // 4) Vytvoření karty – velikost mřížky
+    const ids=d.map(x=>x.id); const card=makeCard(3,ids,false,Math.random); assert('makeCard 3×3 má 9 buněk', card.flat().length===9);
+  })();
+  </script>
 
   <script>
   // ====== Náhled balíčku + blokace tlačítka, pokud je nedostatek symbolů ======
@@ -629,14 +627,17 @@
   renderDeckPreview();
   updateGoState();
   </script>
-</body>e]]; assert('hasBingo – řada', hasBingo(m1,3)===true);
-    // 2) Bingo detekce – diagonála
-    const m2=[[true,false,false],[false,true,false],[false,false,true]]; assert('hasBingo – diagonála', hasBingo(m2,3)===true);
-    // 3) Deck fallback velikost
-    const d=buildDeck([],24); assert('buildDeck fallback ≥ požadavek', d.length>=24);
-    // 4) Vytvoření karty – velikost mřížky
-    const ids=d.map(x=>x.id); const card=makeCard(3,ids,false,Math.random); assert('makeCard 3×3 má 9 buněk', card.flat().length===9);
-  })();
+  <script>
+    // Bezpečná dodatečná inicializace galerie (pro případ, že by první render neproběhl)
+    try {
+      if (typeof renderGallery === 'function') {
+        renderGallery('all');
+      }
+      if (typeof updateSelectionUI === 'function') updateSelectionUI();
+      if (typeof updateDeckInfo === 'function') updateDeckInfo();
+      if (typeof renderDeckPreview === 'function') renderDeckPreview();
+      if (typeof updateGoState === 'function') updateGoState();
+    } catch (e) { console.warn('Init galerie přeskočen:', e); }
   </script>
 </body>
 </html>
