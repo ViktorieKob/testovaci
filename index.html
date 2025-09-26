@@ -356,6 +356,19 @@
   let lastPDFCards = null, lastPDFCalls = null;
 
   els.go.addEventListener('click', async ()=>{
+    // PŘEDBĚŽNÁ KONTROLA: bez dostatku vybraných symbolů ani nezačínej
+    const requiredPre = ( ()=>{ const size=parseInt(els.size.value,10); const freeCenter=els.free.checked; return size*size - (freeCenter?1:0);} )();
+    const onlyLibElPre = document.getElementById('onlyLibrary');
+    const onlyLibPre = !!(onlyLibElPre && onlyLibElPre.checked);
+    const libNPre = (window.GALLERY_SELECTED && window.GALLERY_SELECTED.size) || 0;
+    const upNPre = (els.files && els.files.files && els.files.files.length) || 0;
+    const havePre = onlyLibPre ? libNPre : (upNPre + libNPre);
+    if(havePre < requiredPre){
+      els.status.innerHTML = `❌ Potřebuji alespoň <strong>${requiredPre}</strong> symbolů; aktuálně máš ${havePre}. Vyber víc obrázků (nebo z knihovny).`;
+      log('Nedostatek symbolů – generování zablokováno.', 'bad');
+      if(typeof updateGoState==='function') updateGoState();
+      return;
+    }
     logBox.innerHTML=''; els.status.textContent='Generuji…';
     els.go.disabled = true; els.dlCards.disabled = true; els.dlCalls.disabled = true;
 
@@ -589,7 +602,9 @@
     const onlyLib = document.getElementById('onlyLibrary').checked;
     const uploadsN = (document.getElementById('files')?.files?.length) || 0;
     const libN = (window.GALLERY_SELECTED?.size) || 0;
-    if(onlyLib){ return libN; }
+    // Pro povolení tlačítka IGNORUJEME fallback – vyžadujeme skutečný výběr
+    return onlyLib ? libN : (uploadsN + libN);
+  }
     if(uploadsN || libN){ return uploadsN + libN; }
     return parseInt(document.getElementById('deckSize').value||'0',10);
   }
