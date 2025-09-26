@@ -435,8 +435,12 @@
     // VESMÍR & FANTASY
     ['Mimozemšťan','1f47d','space'],['Příšerka','1f47e','space'],['Robot','1f916','space'],['Planeta s prstenci','1fa90','space'],['Zářící hvězda','1f31f','space'],['Raketa','1f680','space']
   ];
+  // zpřístupni do window pro jiné skripty
+  window.EMOJI_LIBRARY = EMOJI_LIBRARY;
   const CDN_BASE = 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/';
   const cpToUrl = (hex)=> CDN_BASE + hex.toLowerCase() + '.png';
+  // zpřístupni resolver do window
+  window.cpToUrl = cpToUrl;
 
   const galleryEl = document.getElementById('gallery');
   const deckInfoEl = document.getElementById('deckInfo');
@@ -449,6 +453,8 @@
   const onlyLibraryChk = document.getElementById('onlyLibrary');
 
   let GALLERY_SELECTED = new Set();
+  // ulož referenci do window, aby ji viděly i jiné <script>
+  window.GALLERY_SELECTED = GALLERY_SELECTED;
   let LIB_ITEMS = []; // {label, src, cat, hex}
 
   function renderGallery(filter='all'){
@@ -475,6 +481,8 @@
     } else {
       selListEl.textContent = '';
     }
+    // synchronizace do window pro ostatní skripty
+    window.GALLERY_SELECTED = GALLERY_SELECTED;
     deckInfoEl.textContent = count ? `Balíček z knihovny: ${count} ikon.` : '';
   }
 
